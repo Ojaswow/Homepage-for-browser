@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>New Tab</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+  :root{
+    --glass-bg: rgba(255,255,255,0.08);
+    --glass-bg-strong: rgba(255,255,255,0.14);
+    --glass-border: rgba(255,255,255,0.16);
+    --text: #f1f5f9;
+    --text-dim: #a7b0c0;
+    --accent: #7dd3fc;
+    --accent-2: #f97316;
+  }
+
+  *{ box-sizing:border-box; margin:0; padding:0; font-family:'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-tap-highlight-color: transparent; }
+
+  html, body{
+    width:100%; height:100%;
+    background:#0b1120;
+    color:var(--text);
+    overflow:hidden;
+    overscroll-behavior:none;
+  }
+
+  /* ---------- Background layer ---------- */
+  #bg-container{ position:fixed; inset:0; z-index:0; }
+  #bg-image, #bg-video{
+    width:100%; height:100%; object-fit:cover;
+    position:absolute; inset:0; display:none;
+  }
+  #bg-default{
+    position:absolute; inset:0;
+    background:
+      radial-gradient(circle at 20% 15%, rgba(125,211,252,0.20), transparent 45%),
+      radial-gradient(circle at 85% 80%, rgba(249,115,22,0.16), transparent 45%),
+      linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+  }
+  /* subtle dark scrim so glass + text always stays legible over any photo/video */
+  #bg-scrim{ position:fixed; inset:0; z-index:1; background:rgba(0,0,0,0.28); pointer-events:none; }
+
+  /* ---------- Page scaffold ---------- */
+  .page{
+    position:relative; z-index:2;
+    height:100vh; height:100dvh;
+    width:100%;
+    overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
+  }
+
+  .app-container{
+    display:flex; flex-direction:column;
+    min-height:100%;
+    width:100%; max-width:520px;
+    margin:0 auto;
+    padding: max(12px, env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom));
+    gap:14px;
+  }
+
+  .glass{
+    background:var(--glass-bg);
+    backdrop-filter:blur(20px);
+    -webkit-backdrop-filter:blur(20px);
+    border:1px solid var(--glass-border);
+    border-radius:20px;
+    box-shadow:0 8px 30px rgba(0,0,0,0.28);
+  }
+
+  button{ border:none; background:none; color:inherit; font:inherit; cursor:pointer; }
+
+  /* ---------- Settings FAB (replaces the old top bar) ---------- */
+  .settings-fab{
+    position:absolute;
+    top: max(10px, env(safe-area-inset-top));
+    right:10px;
+    z-index:5;
+    width:38px; height:38px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-size:1rem; color:#e2e8f0;
+    background:var(--glass-bg);
+    backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
+    border:1px solid var(--glass-border);
+    box-shadow:0 4px 16px rgba(0,0,0,0.25);
+    transition:background .15s ease, transform .1s ease;
+  }
+  .settings-fab:active{ transform:scale(0.92); background:var(--glass-bg-strong); }
+
+  /* ---------- Logo ---------- */
+  .logo-container{ text-align:center; margin-top:40px; }
+  .google-logo{ font-size:2.6rem; font-weight:600; letter-spacing:-1px; }
+
+  /* ---------- Search ---------- */
+  .search-bar{
+    display:flex; align-items:center; padding:12px 18px; border-radius:30px; gap:12px;
+  }
+  .google-g{
+    font-weight:800; font-size:1.15rem;
+    background:linear-gradient(45deg,#4285F4,#EA4335,#FBBC05,#34A853);
+    -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+  }
+  .search-input{
+    flex:1; background:transparent; border:none; outline:none;
+    color:#fff; font-size:0.95rem; min-width:0;
+  }
+  .search-input::placeholder{ color:#cbd5e1; }
+  .search-actions{ display:flex; gap:14px; color:#cbd5e1; font-size:1.05rem; flex-shrink:0; }
+  .search-actions i{ cursor:pointer; }
+
+  /* ---------- Quick actions ---------- */
+  .quick-actions{ display:flex; gap:10px; }
+  .action-btn{
+    flex:1; display:flex; align-items:center; justify-content:center; gap:8px;
+    padding:11px; border-radius:25px; font-size:0.85rem; font-weight:500;
+    transition:background .15s ease, transform .1s ease;
+  }
+  .action-btn:active{ transform:scale(0.97); background:var(--glass-bg-strong); }
+
+  /* ---------- Shortcuts ---------- */
+  .shortcuts-container{
+    display:flex; justify-content:space-between; gap:4px; padding:16px 10px;
+  }
+  .shortcut-item{
+    display:flex; flex-direction:column; align-items:center; gap:6px;
+    flex:1 1 0; min-width:0;
+    text-decoration:none; color:#fff;
+  }
+  .shortcut-icon{
+    width:44px; height:44px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-size:1.15rem; transition:transform .12s ease;
+    overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.2);
+  }
+  .shortcut-icon img.shortcut-img{
+    width:60%; height:60%; object-fit:contain;
+  }
+  .shortcut-item:active .shortcut-icon{ transform:scale(0.9); }
+  .shortcut-label{
+    font-size:0.68rem; text-align:center; white-space:nowrap;
+    overflow:hidden; text-overflow:ellipsis; max-width:100%; color:#e2e8f0;
+  }
+
+  /* ---------- Widgets ---------- */
+  .widgets-section{
+    display:grid; grid-template-columns:1fr 1fr; gap:12px;
+  }
+  .widget-card{
+    padding:14px; display:flex; flex-direction:column;
+    justify-content:center; align-items:center; text-align:center;
+    min-width:0;
+  }
+
+  .clock-time{ font-size:1.9rem; font-weight:700; letter-spacing:1px; font-variant-numeric:tabular-nums; }
+  .clock-date{ font-size:0.78rem; color:var(--text-dim); margin-top:4px; }
+
+  .calendar-title{ font-size:0.82rem; font-weight:600; margin-bottom:8px; color:var(--accent); width:100%; }
+  .calendar-grid{
+    display:grid; grid-template-columns:repeat(7,1fr); gap:2px;
+    width:100%; font-size:0.62rem;
+  }
+  .cal-day-head{ font-weight:700; color:#94a3b8; padding:2px 0; }
+  .cal-day{ padding:3px 0; border-radius:5px; }
+  .cal-day.today{ background:var(--accent); color:#0f172a; font-weight:700; }
+
+  /* ---------- Settings sheet (account button) ---------- */
+  .sheet-backdrop{
+    position:fixed; inset:0; z-index:10;
+    background:rgba(0,0,0,0.45);
+    display:none; align-items:flex-end; justify-content:center;
+  }
+  .sheet-backdrop.open{ display:flex; }
+  .sheet{
+    width:100%; max-width:520px;
+    background:rgba(20,26,41,0.92);
+    backdrop-filter:blur(24px); -webkit-backdrop-filter:blur(24px);
+    border:1px solid var(--glass-border);
+    border-radius:24px 24px 0 0;
+    padding:10px 20px calc(22px + env(safe-area-inset-bottom));
+    display:flex; flex-direction:column; gap:14px;
+  }
+  .sheet-handle{
+    width:40px; height:4px; border-radius:2px;
+    background:rgba(255,255,255,0.25); margin:6px auto 2px;
+  }
+  .sheet-title{ font-size:1.05rem; font-weight:600; }
+  .sheet-row{
+    display:flex; align-items:center; justify-content:space-between;
+    gap:12px; padding:12px 0; border-top:1px solid rgba(255,255,255,0.08);
+  }
+  .sheet-row:first-of-type{ border-top:none; }
+  .sheet-row-label{ display:flex; align-items:center; gap:12px; font-size:0.92rem; }
+  .sheet-row-label i{ width:20px; text-align:center; color:var(--accent); }
+  .sheet-btn{
+    padding:8px 14px; border-radius:14px; background:var(--glass-bg-strong);
+    border:1px solid var(--glass-border); font-size:0.82rem; font-weight:500;
+  }
+  .sheet-btn:active{ background:rgba(255,255,255,0.22); }
+  .sheet-btn.danger{ color:#fca5a5; }
+
+  #file-input{ display:none; }
+
+  @media (max-height: 620px){
+    .logo-container{ display:none; }
+    .app-container{ gap:10px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="bg-container">
+  <div id="bg-default"></div>
+  <img id="bg-image" alt="Custom background">
+  <video id="bg-video" autoplay loop muted playsinline></video>
+</div>
+<div id="bg-scrim"></div>
+
+<div class="page">
+  <div class="app-container">
+
+    <!-- Settings access, now a small floating icon since the top bar is gone -->
+    <button class="settings-fab" id="settings-btn" title="Page settings"><i class="fa-solid fa-sliders"></i></button>
+
+    <!-- Logo -->
+    <div class="logo-container">
+      <h1 class="google-logo">Google</h1>
+    </div>
+
+    <!-- Search -->
+    <form class="search-bar glass" id="search-form">
+      <span class="google-g">G</span>
+      <input type="text" class="search-input" id="search-input" placeholder="Search Google or type a URL" autocomplete="off">
+      <div class="search-actions">
+        <i class="fa-solid fa-microphone" id="mic-btn" title="Voice search"></i>
+        <i class="fa-solid fa-camera" id="lens-btn" title="Search by image"></i>
+      </div>
+    </form>
+
+    <!-- Quick actions -->
+    <div class="quick-actions">
+      <button class="action-btn glass" id="ai-mode-btn"><i class="fa-solid fa-wand-magic-sparkles"></i> AI Mode</button>
+      <button class="action-btn glass" id="incognito-btn"><i class="fa-solid fa-user-ninja"></i> Incognito</button>
+    </div>
+
+    <!-- Shortcuts -->
+    <div class="shortcuts-container glass" id="shortcuts">
+      <!-- GitHub -->
+            <a href="https://github.com" class="shortcut-item">
+                <div class="shortcut-icon" style="background:#24292e;">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+                        <path fill="#ffffff" d="M256 6.3C114.6 6.3 0 120.9 0 262.3c0 113.3 73.3 209 175 242.9 12.8 2.2 17.6-5.4 17.6-12.2 0-6.1-.3-26.2-.3-47.7-64.3 11.8-81-15.7-86.1-30.1-2.9-7.4-15.4-30.1-26.2-36.2-9-4.8-21.8-16.6-.3-17 20.2-.3 34.6 18.6 39.4 26.2 23 38.7 59.8 27.8 74.6 21.1 2.2-16.6 9-27.8 16.3-34.2-57-6.4-116.5-28.5-116.5-126.4 0-27.8 9.9-50.9 26.2-68.8-2.6-6.4-11.5-32.6 2.6-67.8 0 0 21.4-6.7 70.4 26.2 20.5-5.8 42.2-8.6 64-8.6s43.5 2.9 64 8.6c49-33.3 70.4-26.2 70.4-26.2 14.1 35.2 5.1 61.4 2.6 67.8 16.3 17.9 26.2 40.6 26.2 68.8 0 98.2-59.8 120-116.8 126.4 9.3 8 17.3 23.4 17.3 47.4 0 34.2-.3 61.8-.3 70.4 0 6.7 4.8 14.7 17.6 12.2C438.7 471.3 512 375.3 512 262.3c0-141.4-114.6-256-256-256"/>
+                    </svg>
+                </div>
+                <span class="shortcut-label">GitHub</span>
+            </a>
+      <!-- Flipkart -->
+<a href="https://www.flipkart.com" class="shortcut-item">
+    <div class="shortcut-icon" style="background:#2874f0;">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#ffe500">
+            <path d="M19 6h-2c0-2.76-2.24-5-5-5S7 3.24 7 6H5c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-7-3c1.66 0 3 1.34 3 3H9c0-1.66 1.34-3 3-3zm0 10c-1.66 0-3-1.34-3-3h2c0 .55.45 1 1 1s1-.45 1-1h2c0 1.66-1.34 3-3 3z"/>
+        </svg>
+    </div>
+    <span class="shortcut-label">Flipkart</span>
+</a>
+
+
+       <!-- YouTube (Icon Size Fixed) -->
+<a href="https://youtube.com" class="shortcut-item">
+    <div class="shortcut-icon" style="background:#ff0000;">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="-60 -60 632 632">
+            <path fill="#ffffff" d="M508.6 148.8c0-45-33.1-81.2-74-81.2C370.6 62.6 256 62.6 256 62.6s-114.6 0-178.6 5C36.5 67.6 3.4 103.8 3.4 148.8 0 193.8 0 256 0 256s0 62.2 3.4 107.2c0 45 33.1 81.2 74 81.2 64 5 178.6 5 178.6 5s114.6 0 178.6-5c40.9 0 74-36.2 74-81.2 3.4-45 3.4-107.2 3.4-107.2s0-62.2-3.4-107.2zM204.6 329V183l128 73-128 73z"/>
+        </svg>
+    </div>
+    <span class="shortcut-label">YouTube</span>
+</a>
+
+     <!-- Wikipedia -->
+            <a href="https://wikipedia.org" class="shortcut-item">
+                <div class="shortcut-icon" style="background:#ffffff;">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+                        <path fill="#000000" d="M256 32C132.3 32 32 132.3 32 256s100.3 224 224 224 224-100.3 224-224S379.7 32 256 32zm-12.2 300h-25.2l-40.8-118-40.8 118H112L56 160h28.8l38.4 122.4 39.6-122.4h22.8l39.6 122.4L263.6 160h28.8l-56 172zm128-12.8h-26.4l-28.8-88.8-28.8 88.8h-26.4l-38.4-122.4h26.4l25.2 88.8 28.8-88.8h22.8l28.8 88.8 25.2-88.8h26.4l-38.4 122.4z"/>
+                    </svg>
+                </div>
+                <span class="shortcut-label">Wikipedia</span>
+          <!-- ChatGPT -->
+<a href="https://chatgpt.com" class="shortcut-item">
+    <div class="shortcut-icon" style="background:#10a37f;">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20.2 10.7a5.5 5.5 0 0 0-4.6-4.6 5.5 5.5 0 0 0-8.2-1.8 5.5 5.5 0 0 0-5.8 3.5 5.5 5.5 0 0 0 1.2 6.3 5.5 5.5 0 0 0 4.6 4.6 5.5 5.5 0 0 0 8.2 1.8 5.5 5.5 0 0 0 5.8-3.5 5.5 5.5 0 0 0-1.2-6.3z"/>
+            <path d="M12 8v8M8 10l8 4M8 14l8-4"/>
+        </svg>
+    </div>
+    <span class="shortcut-label">ChatGPT</span>
+</a>
+
+
+    </div>
+
+    <!-- Widgets -->
+    <div class="widgets-section">
+      <div class="widget-card glass">
+        <div class="clock-time" id="clock-time">00:00</div>
+        <div class="clock-date" id="clock-date">Mon, Jan 1</div>
+      </div>
+      <div class="widget-card glass">
+        <div class="calendar-title" id="cal-month">Month Year</div>
+        <div class="calendar-grid" id="cal-grid"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Settings bottom sheet: this is where the old floating "Custom BG" button now lives -->
+<div class="sheet-backdrop" id="sheet-backdrop">
+  <div class="sheet" id="sheet" role="dialog" aria-label="Page settings">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Page settings</div>
+
+    <div class="sheet-row">
+      <div class="sheet-row-label"><i class="fa-solid fa-image"></i> Background photo or video</div>
+      <label class="sheet-btn" for="file-input">Choose file</label>
+    </div>
+    <div class="sheet-row">
+      <div class="sheet-row-label"><i class="fa-solid fa-rotate-left"></i> Reset background</div>
+      <button class="sheet-btn danger" id="reset-bg-btn">Reset</button>
+    </div>
+    <div class="sheet-row">
+      <div class="sheet-row-label"><i class="fa-solid fa-xmark"></i> Close</div>
+      <button class="sheet-btn" id="close-sheet-btn">Done</button>
+    </div>
+  </div>
+</div>
+<input type="file" id="file-input" accept="image/*,video/*">
+
+<script>
+  // ---------- Live clock ----------
+  function updateClock(){
+    const now = new Date();
+    let h = now.getHours(), m = now.getMinutes();
+    h = h < 10 ? '0'+h : h;
+    m = m < 10 ? '0'+m : m;
+    document.getElementById('clock-time').textContent = `${h}:${m}`;
+    document.getElementById('clock-date').textContent =
+      now.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+  }
+  setInterval(updateClock, 1000);
+  updateClock();
+
+  // ---------- Mini calendar ----------
+  function generateCalendar(){
+    const now = new Date();
+    const year = now.getFullYear(), month = now.getMonth(), today = now.getDate();
+    const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    document.getElementById('cal-month').textContent = `${monthNames[month]} ${year}`;
+
+    const grid = document.getElementById('cal-grid');
+    grid.innerHTML = '';
+    ['S','M','T','W','T','F','S'].forEach(d=>{
+      const el = document.createElement('div');
+      el.className = 'cal-day-head';
+      el.textContent = d;
+      grid.appendChild(el);
+    });
+
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month+1, 0).getDate();
+    for (let i=0;i<firstDay;i++) grid.appendChild(document.createElement('div'));
+    for (let day=1; day<=daysInMonth; day++){
+      const el = document.createElement('div');
+      el.className = 'cal-day' + (day===today ? ' today' : '');
+      el.textContent = day;
+      grid.appendChild(el);
+    }
+  }
+  generateCalendar();
+
+  // ---------- Background upload, persisted across reloads via IndexedDB ----------
+  // (IndexedDB is used instead of localStorage because photos/videos are far too
+  // large for localStorage's ~5MB limit; IndexedDB can comfortably store both.)
+  const fileInput = document.getElementById('file-input');
+  const bgImage   = document.getElementById('bg-image');
+  const bgVideo   = document.getElementById('bg-video');
+  const bgDefault = document.getElementById('bg-default');
+
+  const DB_NAME = 'customNewTabDB';
+  const STORE_NAME = 'background';
+  const BG_KEY = 'currentBg';
+
+  function openDB(){
+    return new Promise((resolve, reject)=>{
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = ()=>{ req.result.createObjectStore(STORE_NAME); };
+      req.onsuccess = ()=> resolve(req.result);
+      req.onerror = ()=> reject(req.error);
+    });
+  }
+
+  async function saveBgToDB(blob, type){
+    try{
+      const db = await openDB();
+      await new Promise((resolve, reject)=>{
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        tx.objectStore(STORE_NAME).put({ blob, type }, BG_KEY);
+        tx.oncomplete = resolve;
+        tx.onerror = ()=> reject(tx.error);
+      });
+    }catch(e){ console.error('Could not save background', e); }
+  }
+
+  async function loadBgFromDB(){
+    try{
+      const db = await openDB();
+      return await new Promise((resolve, reject)=>{
+        const tx = db.transaction(STORE_NAME, 'readonly');
+        const req = tx.objectStore(STORE_NAME).get(BG_KEY);
+        req.onsuccess = ()=> resolve(req.result || null);
+        req.onerror = ()=> reject(req.error);
+      });
+    }catch(e){ console.error('Could not load background', e); return null; }
+  }
+
+  async function clearBgFromDB(){
+    try{
+      const db = await openDB();
+      await new Promise((resolve, reject)=>{
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        tx.objectStore(STORE_NAME).delete(BG_KEY);
+        tx.oncomplete = resolve;
+        tx.onerror = ()=> reject(tx.error);
+      });
+    }catch(e){ console.error('Could not clear background', e); }
+  }
+
+  function showImageBg(url){
+    bgVideo.pause(); bgVideo.removeAttribute('src'); bgVideo.style.display='none';
+    bgImage.src = url; bgImage.style.display='block';
+    bgDefault.style.display='none';
+  }
+  function showVideoBg(url){
+    bgImage.style.display='none'; bgImage.removeAttribute('src');
+    bgVideo.src = url; bgVideo.style.display='block'; bgVideo.play().catch(()=>{});
+    bgDefault.style.display='none';
+  }
+  function resetBg(){
+    bgImage.style.display='none'; bgImage.removeAttribute('src');
+    bgVideo.pause(); bgVideo.style.display='none'; bgVideo.removeAttribute('src');
+    bgDefault.style.display='block';
+    clearBgFromDB();
+  }
+
+  // Restore saved background as soon as the page loads
+  (async ()=>{
+    const saved = await loadBgFromDB();
+    if (saved && saved.blob){
+      const url = URL.createObjectURL(saved.blob);
+      if (saved.type.startsWith('video/')) showVideoBg(url);
+      else showImageBg(url);
+    }
+  })();
+
+  fileInput.addEventListener('change', (e)=>{
+    const file = e.target.files[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    if (file.type.startsWith('image/')){
+      showImageBg(url);
+      saveBgToDB(file, file.type);
+    } else if (file.type.startsWith('video/')){
+      showVideoBg(url);
+      saveBgToDB(file, file.type);
+    }
+    closeSheet();
+  });
+
+  document.getElementById('reset-bg-btn').addEventListener('click', resetBg);
+
+  // ---------- Settings bottom sheet open/close ----------
+  const sheetBackdrop = document.getElementById('sheet-backdrop');
+  function openSheet(){ sheetBackdrop.classList.add('open'); }
+  function closeSheet(){ sheetBackdrop.classList.remove('open'); }
+
+  document.getElementById('settings-btn').addEventListener('click', openSheet);
+  document.getElementById('close-sheet-btn').addEventListener('click', closeSheet);
+  sheetBackdrop.addEventListener('click', (e)=>{ if (e.target === sheetBackdrop) closeSheet(); });
+
+  // ---------- Search bar ----------
+  document.getElementById('search-form').addEventListener('submit', (e)=>{
+    e.preventDefault();
+    const q = document.getElementById('search-input').value.trim();
+    if (!q) return;
+    const looksLikeUrl = /^https?:\/\//i.test(q) || (/^[\w-]+(\.[\w-]+)+.*$/.test(q) && !q.includes(' '));
+    window.location.href = looksLikeUrl
+      ? (/^https?:\/\//i.test(q) ? q : 'https://' + q)
+      : 'https://www.google.com/search?q=' + encodeURIComponent(q);
+  });
+
+  document.getElementById('mic-btn').addEventListener('click', ()=>{
+    window.location.href = 'https://www.google.com/search?q=%20&voice=1';
+  });
+  document.getElementById('lens-btn').addEventListener('click', ()=>{
+    window.location.href = 'https://lens.google.com';
+  });
+
+  document.getElementById('ai-mode-btn').addEventListener('click', ()=>{
+    window.location.href = 'https://www.google.com/search?udm=50';
+  });
+  document.getElementById('incognito-btn').addEventListener('click', ()=>{
+    // Chrome doesn't allow a webpage to open incognito directly (sandboxed),
+    // so this opens a fresh tab; use Chrome's menu > "New Incognito tab" to actually go incognito.
+    window.open(location.href, '_blank');
+  });
+</script>
+</body>
+</html>
